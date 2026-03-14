@@ -16,7 +16,7 @@ and execute it:
    expression to a variable, and is introduced by the let keyword.
    For example: *)
 
-let x = 1 + 2
+let x = 8 + 2
 let () = print_int x
 let y = x * x
 let () = print_int y;;
@@ -73,6 +73,7 @@ let e42 = Binop (Add, Binop (Add, Const 12, Const 20), Const 10)
 (* we can redefine the expression e42 *)
 let e42 = Binop (Add, Binop (Add, Const 12, Const 20), ten)
 let e42 = Binop (Mul, two, Binop(Add,Const 20,one))
+let twenty = Binop(Mul, two, ten)
 
 
 (* ------------------------------ Functions ----------------------------------*)
@@ -82,8 +83,9 @@ let pls_one (e : expr) : expr = Binop (Add, e, Const 1)
 let pls_one e = Binop (Add, e, Const 1)
 
 let times_two e = Binop (Add, e, e)
-
+(*Jeg har lavet en square funtion hvor der er en parameter e som ganges med sig selv*)
 let square e = Binop (Mul, e, e)
+
 
 (* ----------------------------- Pattern Matching ----------------------------*)
 (* when we have an algebraic data type, we can make pattern matching analysis
@@ -92,21 +94,27 @@ let square e = Binop (Mul, e, e)
    returns a string saying that if expression e is a constant, we give it's
    string representation, and in case of addition we just return a string
    "addition" (we will of course redefine this function better just below). *)
-let expr_to_string e = match e with
+
+let op_to_string = function
+|   Add -> "+"
+|   Mul -> "*"
+
+
+let rec expr_to_string e = (match e with
   | Const c -> string_of_int c
-  | Binop (Add, e1, e2) -> "Addition"
-  | Binop (Mul, e1, e2) -> "Multiplication"
-  
+  | Binop (op, e1, e2) -> "(" ^ expr_to_string e1 ^ op_to_string op ^ expr_to_string e2 ^ ")")
+ 
 let _s1 = expr_to_string one
 let _s2 = expr_to_string ten
 let _s3 = expr_to_string (times_two one)
 let _s4 = expr_to_string e42
+let () = print_endline("\n" ^ _s4)
 
 (* --------------------------- Recursive Functions ---------------------------*)
 
 (* Because the type of arithmetic expressions is recursive, our functions
    deconstructing those expressions are most of the time recursive as well:  *)
-let rec expr_to_string e = match e with
+let rec expr_to_string e = (match e with
   | Const c -> string_of_int c
   | Binop (Add, e1, e2) ->
     let s1 = expr_to_string e1 in
@@ -115,29 +123,38 @@ let rec expr_to_string e = match e with
   | Binop (Mul, e1, e2) ->
     let s1' = expr_to_string e1 in
     let s2' = expr_to_string e2 in
-    "(" ^s1' ^ " * " ^ s2' ^ ")"
+    "(" ^s1' ^ " * " ^ s2' ^ ")")
 
 
 let _s1 = expr_to_string one
 let _s2 = expr_to_string ten
 let _s3 = expr_to_string (times_two one)
 let _s4 = expr_to_string e42
+let _s5 = expr_to_string twenty
 (* returns the string "((12 + 20) + (3 + 7))" *)
 
 (* --- Interpreter --- *)
 
 (* Finally, let's interpret our arithmetic expressions, i.e.
    actually compute their values: *)
-let rec interp e = match e with
+let rec interp e = (match e with
   | Const c -> c
-  | Binop (Add, e1, e2) -> interp e1 + interp e2
-  | Binop (Mul, e1, e2) -> interp e1 * interp e2
+  | Binop (op, e1, e2) -> 
+    let v1 = interp e1 in
+    let v2 = interp e2 in
+    (match op with 
+      | Add -> v1 + v2
+      | Mul -> v1 * v2)
+)
+  
 
 
 let _ = interp one
 let _ = interp ten
 let _ = interp (times_two one)
 let _ = interp e42
+let check = interp (square (Const 2))
+let () = print_endline(string_of_int(check))
 (* interp of ((12 + 20) + (3 + 7)) should indeed give 42. *)
 
 (* --- Syntax Manipulation --- *)
@@ -166,48 +183,57 @@ let s3 = expr_to_string v3
 
 (* Simplifier version 1, wrong -
    does not simplify in depth of the expression *)
-let rec simplify e = match e with
+let rec simplify e = (match e with
   | Const c -> e
   | Binop (Add, Const 0, e)
   | Binop (Add, e, Const 0) -> e
   | Binop (Add, e1, e2) -> Binop (Add, e1, e2)
+  | Binop (Mul, e1, e2) -> Binop (Mul, e1, e2))
+
 
 let s1 = expr_to_string (simplify v1)
 let s2 = expr_to_string (simplify v2)
 let s3 = expr_to_string (simplify v3)
 
 (* Simplifier version 2, correct *)
-let rec simplify e = match e with
+let rec simplify e = (match e with
   | Const c -> e
-  | Binop (Add, Const 0, e)
-  | Binop (Add, e, Const 0) -> simplify e
-  | Binop (Add, e1, e2) -> Binop (Add, simplify e1, simplify e2)
+  | Binop(op, e, Const 0) | Binop (op, Const 0, e) ->
+    (match op with 
+      | Add -> e
+      | Mul -> Const 0)
+
+  | Binop  (Mul, e, Const 1) | Binop (Mul, Const 1, e) -> e 
+  | Binop(op, e1, e2) -> Binop(op, simplify e1, simplify e2))
 
 let s1 = expr_to_string (simplify v1)
 let s2 = expr_to_string (simplify v2)
 let s3 = expr_to_string (simplify v3)
 
+let () = print_endline(s3)
 (* ----------------------------- Exceptions ----------------------------------*)
 
 (* Declaring exception *)
 exception Negative_Const
 
-let rec check_valid e = match e with
+let rec check_valid e = (match e with
   | Const c -> if c < 0 then raise Negative_Const else Const c
-  | Binop (Add, e1, e2) ->
-    Binop (Add, check_valid e1, check_valid e2)
+  | Binop (op, e1, e2) ->
+    Binop (op,check_valid e1, check_valid e2))
 
-let c = check_valid (Const (-1))
+let c = check_valid (Const (1))
 
 (* Declaring exception with a value *)
 exception Negative_Const of int
 
-let rec check_valid e = match e with
+let rec check_valid e = (match e with
   | Const c -> if c < 0 then raise (Negative_Const c) else Const c
   | Binop (Add, e1, e2) ->
       Binop (Add, check_valid e1, check_valid e2)
+  | Binop (Mul, e1, e2) ->
+      Binop (Mul, check_valid e1, check_valid e2))
 
-let c = check_valid (Const (-1))
+let c = check_valid (Const (1))
 
 let print_expr e =
   try
@@ -216,3 +242,21 @@ let print_expr e =
     Printf.printf "Invalid input: the constant %d is a negative number\n" c
 
 let () = print_expr (Const (-12))
+let () = print_expr (Const (-44))
+
+let squareprint = square(Const 2)
+let () = print_endline (expr_to_string squareprint);;
+let () = print_string(string_of_int(interp squareprint) ^ " Hello world " ^ "\n")
+let () = print_endline (string_of_int (interp squareprint));;
+
+
+let rec sum n =
+  if n <= 0 then Const 0
+  else
+    let res = sum (n-1) in
+      Binop (Add, Const n, res)
+
+
+let teest = sum(5)
+let () = print_endline(expr_to_string teest)
+let () = print_endline(string_of_int (interp teest))
